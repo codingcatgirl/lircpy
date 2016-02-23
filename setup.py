@@ -7,7 +7,6 @@ setup(
     name='lircpy',
     version='0.1.0',
     description='accessing the LIRC socket interface using Python 3',
-    long_description=open(os.path.join(os.path.dirname(__file__), 'README.md')).read(),
     packages=['lircpy'],
     py_modules=['lircpy'],
     author='Nicole Klünder',
