@@ -1,6 +1,6 @@
 import socket
 import time
-from collections import deque
+from threading import Lock
 
 from .exceptions import InvalidResponseError, LircError
 
@@ -27,52 +27,48 @@ class LircPy():
 
         self._last_sent = {}
 
-        self.queue = deque()
+        self.lock = Lock()
 
     def _send(self, command):
         """ Send a raw socket command to LIRC. """
         command = command.strip()
-        myid = id(command)
-        self.queue.append(myid)
-        while self.queue[0] != myid:
-            time.sleep(0.01)
 
-        self.s.send((command.strip()+'\n').encode())
-        i = 0
-        data_end = None
-        cmd_state = None
-        data = ''
-        while True:
-            line = self.sf.readline().strip()
-            if i == 0:
-                if line != 'BEGIN':
-                    raise InvalidResponseError('Expected {0!r} but got {1!r}'.format('BEGIN', line))
-            elif i == 1:
-                if line != command:
-                    raise InvalidResponseError('Expected {0!r} but got {1!r}'.format(command, line))
-            elif i == 2:
-                if line not in ('SUCCESS', 'ERROR'):
-                    raise InvalidResponseError('Expected {0!r} or {1!r} but got {2!r}'.format('SUCCESS', 'ERROR', line))
-                cmd_state = line
-            elif i == 3:
-                if line == 'END':
+        with self.lock:
+            self.s.send((command.strip()+'\n').encode())
+            i = 0
+            data_end = None
+            cmd_state = None
+            data = ''
+            while True:
+                line = self.sf.readline().strip()
+                if i == 0:
+                    if line != 'BEGIN':
+                        raise InvalidResponseError('Expected {0!r} but got {1!r}'.format('BEGIN', line))
+                elif i == 1:
+                    if line != command:
+                        raise InvalidResponseError('Expected {0!r} but got {1!r}'.format(command, line))
+                elif i == 2:
+                    if line not in ('SUCCESS', 'ERROR'):
+                        raise InvalidResponseError('Expected {0!r} or {1!r} but got {2!r}'.format('SUCCESS',
+                                                                                                  'ERROR', line))
+                    cmd_state = line
+                elif i == 3:
+                    if line == 'END':
+                        break
+                    if line != 'DATA':
+                        raise InvalidResponseError('Expected {0!r} or {1!r} but got {2!r}'.format('END', 'DATA', line))
+                elif i == 4:
+                    if not line.isdigit():
+                        raise InvalidResponseError('Expected data length integer but got {0!r}'.format(line))
+                    data_end = 5+int(line)
+                elif i < data_end:
+                    data += line+'\n'
+                elif i == data_end:
+                    if line != 'END':
+                        raise InvalidResponseError('Expected {0!r} but got {1!r}'.format('END', line))
                     break
-                if line != 'DATA':
-                    raise InvalidResponseError('Expected {0!r} or {1!r} but got {2!r}'.format('END', 'DATA', line))
-            elif i == 4:
-                if not line.isdigit():
-                    raise InvalidResponseError('Expected data length integer but got {0!r}'.format(line))
-                data_end = 5+int(line)
-            elif i < data_end:
-                data += line+'\n'
-            elif i == data_end:
-                if line != 'END':
-                    raise InvalidResponseError('Expected {0!r} but got {1!r}'.format('END', line))
-                break
+                i += 1
 
-            i += 1
-
-        self.queue.popleft()
         if cmd_state == 'ERROR':
             raise LircError(data if data else None)
 

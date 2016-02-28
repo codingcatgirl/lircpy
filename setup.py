@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-import os
-
 from setuptools import setup
 
 setup(
     name='lircpy',
-    version='0.1.0',
+    version='0.2.0',
     description='accessing the LIRC socket interface using Python 3',
     packages=['lircpy'],
     py_modules=['lircpy'],
